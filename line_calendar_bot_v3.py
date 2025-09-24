@@ -32,7 +32,7 @@ handler = WebhookHandler(CHANNEL_SECRET)
 # ====== Google Calendar 設定 ======
 SERVICE_ACCOUNT_FILE = "credentials.json"
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
-CALENDAR_ID = "primary"
+CALENDAR_ID = "cyclonepop0001@gmail.com"
 
 creds = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE, scopes=SCOPES
@@ -135,3 +135,4 @@ def on_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
