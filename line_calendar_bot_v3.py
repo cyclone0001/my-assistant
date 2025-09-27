@@ -76,17 +76,20 @@ def add_simple_event_jp(text):
 
     tz = datetime.timezone(datetime.timedelta(hours=9))
     base = datetime.datetime.now(tz).date()
-    date = base if day_word=="今日" else (base + datetime.timedelta(days=1))
-    start = datetime.datetime.combine(date, datetime.time(hour,0,tzinfo=tz))
-    end   = start + datetime.timedelta(hours=1)
+    date = base if day_word == "今日" else (base + datetime.timedelta(days=1))
+    start = datetime.datetime.combine(date, datetime.time(hour, 0, tzinfo=tz))
+    end = start + datetime.timedelta(hours=1)
 
     body = {
         "summary": title,
         "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
         "end":   {"dateTime": end.isoformat(),   "timeZone": "Asia/Tokyo"},
     }
-    calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
-    return f"{day_word}{hour}時『{title}』を登録しました。"
+    # ← ここで返り値を変える！
+    res = calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+    link = res.get("htmlLink", "")
+    return f"{day_word}{hour}時『{title}』を登録しました。\n{link}"
+
 
 # ====== Flask ======
 app = Flask(__name__)
@@ -135,4 +138,5 @@ def on_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
