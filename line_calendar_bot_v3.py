@@ -68,27 +68,65 @@ def list_today_events():
 
 def add_simple_event_jp(text):
     import re
-    m = re.match(r"(今日|明日)\s*(\d{1,2})時\s*(.+)", text)
-    if not m:
-        return None
-    day_word, hour, title = m.groups()
-    hour = int(hour)
-
     tz = datetime.timezone(datetime.timedelta(hours=9))
-    base = datetime.datetime.now(tz).date()
-    date = base if day_word == "今日" else (base + datetime.timedelta(days=1))
-    start = datetime.datetime.combine(date, datetime.time(hour, 0, tzinfo=tz))
-    end = start + datetime.timedelta(hours=1)
+    now = datetime.datetime.now(tz)
 
-    body = {
-        "summary": title,
-        "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
-        "end":   {"dateTime": end.isoformat(),   "timeZone": "Asia/Tokyo"},
-    }
-    # ← ここで返り値を変える！
-    res = calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
-    link = res.get("htmlLink", "")
-    return f"{day_word}{hour}時『{title}』を登録しました。\n{link}"
+    # -------------------------
+    # 終日予定
+    # 例: 今日 終日 出張
+    # -------------------------
+    m = re.match(r"(今日|明日)\s*終日\s*(.+)", text)
+    if m:
+        day_word, title = m.groups()
+        date = now.date() if day_word == "今日" else (now.date() + datetime.timedelta(days=1))
+        body = {
+            "summary": title,
+            "start": {"date": date.isoformat()},
+            "end": {"date": (date + datetime.timedelta(days=1)).isoformat()},
+        }
+        calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+        return f"{day_word} 終日『{title}』を登録しました。"
+
+    # -------------------------
+    # 時間範囲
+    # 例: 今日10:30-11:45 打合せ
+    # -------------------------
+    m = re.match(r"(今日|明日)\s*(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})\s*(.+)", text)
+    if m:
+        day_word, sh, sm, eh, em, title = m.groups()
+        date = now.date() if day_word == "今日" else (now.date() + datetime.timedelta(days=1))
+        start = datetime.datetime.combine(date, datetime.time(int(sh), int(sm), tzinfo=tz))
+        end = datetime.datetime.combine(date, datetime.time(int(eh), int(em), tzinfo=tz))
+        body = {
+            "summary": title,
+            "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
+            "end": {"dateTime": end.isoformat(), "timeZone": "Asia/Tokyo"},
+        }
+        calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+        return f"{day_word}{sh}:{sm}〜{eh}:{em}『{title}』を登録しました。"
+
+    # -------------------------
+    # 分指定（＋オプションで長さ指定）
+    # 例: 明日10:15 90分 面談
+    # -------------------------
+    m = re.match(r"(今日|明日)\s*(\d{1,2})(?::(\d{2}))?時?\s*(\d+)?分?\s*(.+)", text)
+    if m:
+        day_word, hour, minute, dur, title = m.groups()
+        minute = int(minute) if minute else 0
+        dur = int(dur) if dur else 60  # デフォルト1時間
+        date = now.date() if day_word == "今日" else (now.date() + datetime.timedelta(days=1))
+        start = datetime.datetime.combine(date, datetime.time(int(hour), minute, tzinfo=tz))
+        end = start + datetime.timedelta(minutes=dur)
+        body = {
+            "summary": title,
+            "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
+            "end": {"dateTime": end.isoformat(), "timeZone": "Asia/Tokyo"},
+        }
+        calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+        return f"{day_word}{hour}:{minute:02d}〜{dur}分『{title}』を登録しました。"
+
+    return None
+
 
 
 # ====== Flask ======
@@ -138,5 +176,6 @@ def on_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
