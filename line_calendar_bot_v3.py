@@ -81,4 +81,116 @@ def add_simple_event_jp(text):
             body = {
                 "summary": title,
                 "start": {"date": explicit_date.isoformat()},
-                "end":   {"date": (explicit_date + datetime.timedelta(days=1)).isof_
+                "end":   {"date": (explicit_date + datetime.timedelta(days=1)).isoformat()},
+            }
+            res = calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+            print("EVENT_INSERTED", res)
+            return f"{explicit_date.strftime('%m/%d')} 終日『{title}』を登録しました。"
+
+        # 時間範囲
+        m = re.match(r"^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})\s+(.+)$", rest)
+        if m:
+            sh, sm, eh, em, title = m.groups()
+            start = datetime.datetime.combine(explicit_date, datetime.time(int(sh), int(sm), tzinfo=tz))
+            end   = datetime.datetime.combine(explicit_date, datetime.time(int(eh), int(em), tzinfo=tz))
+            body = {
+                "summary": title,
+                "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
+                "end":   {"dateTime": end.isoformat(),   "timeZone": "Asia/Tokyo"},
+            }
+            res = calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+            print("EVENT_INSERTED", res)
+            return f"{explicit_date.strftime('%m/%d')} {sh}:{sm}〜{eh}:{em}『{title}』を登録しました。"
+
+        # 単一開始＋長さ
+        m = re.match(r"^(\d{1,2})(?::(\d{2}))?時?\s*(\d+)?分?\s+(.+)$", rest)
+        if m:
+            hour, minute, dur, title = m.groups()
+            minute = int(minute) if minute else 0
+            dur = int(dur) if dur else 60
+            start = datetime.datetime.combine(explicit_date, datetime.time(int(hour), minute, tzinfo=tz))
+            end   = start + datetime.timedelta(minutes=dur)
+            body = {
+                "summary": title,
+                "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Tokyo"},
+                "end":   {"dateTime": end.isoformat(),   "timeZone": "Asia/Tokyo"},
+            }
+            res = calendar_service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+            print("EVENT_INSERTED", res)
+            return f"{explicit_date.strftime('%m/%d')} {int(hour)}:{minute:02d}〜{dur}分『{title}』を登録しました。"
+
+        return None
+
+    # （今日/明日パターンも同様に res を print する …省略）
+    return None
+
+# -------------------------
+# カレンダー一覧（debug用）
+# -------------------------
+def list_accessible_calendars():
+    items = calendar_service.calendarList().list().execute().get("items", [])
+    if not items:
+        return "見えるカレンダーなし"
+    lines = [f"- {i.get('summary')} : {i.get('id')}" for i in items]
+    return "見えるカレンダー:\n" + "\n".join(lines)
+
+# -------------------------
+# ヘルプ
+# -------------------------
+def get_help_text():
+    return (
+        "📌 使い方一覧\n\n"
+        "予定追加:\n"
+        "・今日15時 会議\n"
+        "・明日10:30 打合せ\n"
+        "・10/3 15:30 会議\n"
+        "・2025/10/3 10:00-11:30 面談\n"
+        "・10月3日 終日 出張\n\n"
+        "予定確認:\n"
+        "・今日の予定 / 今週の予定 / 来週の予定 / 今月の予定\n\n"
+        "予定削除:\n"
+        "・削除 今日15時 会議\n\n"
+        "ℹ️ コマンドが分からなくなったら「help」と送ってね！"
+    )
+
+# -------------------------
+# Flask
+# -------------------------
+app = Flask(__name__)
+
+@app.route("/callback", methods=["POST"])
+def callback():
+    body = request.get_data(as_text=True)
+    signature = request.headers.get("X-Line-Signature", "")
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        return "Bad signature", 400
+    return "OK", 200
+
+@handler.add(MessageEvent, message=TextMessageContent)
+def on_message(event):
+    text = event.message.text.strip()
+    try:
+        if text == "今日の予定":
+            reply_text = "（今日の予定を返す処理…省略）"
+        elif text.lower() == "help":
+            reply_text = get_help_text()
+        elif text.lower() == "debug":
+            reply_text = list_accessible_calendars() + f"\n\n使用中CALENDAR_ID: {CALENDAR_ID}"
+        else:
+            created = add_simple_event_jp(text)
+            reply_text = created if created else "受け取りました: " + text
+    except Exception as e:
+        reply_text = f"エラー: {e}"
+
+    with ApiClient(config) as api_client:
+        MessagingApi(api_client).reply_message(
+            ReplyMessageRequest(
+                replyToken=event.reply_token,
+                messages=[TextMessage(text=reply_text)]
+            )
+        )
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
