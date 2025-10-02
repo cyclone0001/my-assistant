@@ -41,6 +41,8 @@ creds = service_account.Credentials.from_service_account_file(
 )
 calendar_service = build("calendar", "v3", credentials=creds)
 
+print("SA_EMAIL:", creds.service_account_email)
+
 # -------------------------
 # 日付解析 (10/3, 2025/10/3, 10月3日 など)
 # -------------------------
@@ -194,3 +196,4 @@ def on_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
